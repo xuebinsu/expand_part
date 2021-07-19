@@ -77,15 +77,15 @@ Datum expand_partitioned_table_redistribute_leaf(PG_FUNCTION_ARGS)
         {
             Datum dist_by = DirectFunctionCall1(pg_get_table_distributedby, ObjectIdGetDatum(root_oid));
             appendStringInfo(
-                &alter_table_cmd, "ALTER TABLE %s SET %s;", DatumGetName(leaf_name)->data, text_to_cstring(DatumGetTextP(dist_by)));
+                &alter_table_cmd, "ALTER TABLE %s SET %s;", DatumGetCString(leaf_name), text_to_cstring(DatumGetTextP(dist_by)));
         }
         else
         {
-            appendStringInfo(&alter_table_cmd, "ALTER TABLE %s EXPAND TABLE;", DatumGetName(leaf_name)->data);
+            appendStringInfo(&alter_table_cmd, "ALTER TABLE %s EXPAND TABLE;", DatumGetCString(leaf_name));
         }
         ret = SPI_execute(alter_table_cmd.data, false, 0);
         if (ret != SPI_OK_UTILITY)
-            elog(ERROR, "Redistribute partition %s failed.", DatumGetName(leaf_name)->data);
+            elog(ERROR, "Redistribute partition %s failed.", DatumGetCString(leaf_name));
     }
     PG_CATCH();
     {

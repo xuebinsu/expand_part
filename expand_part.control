@@ -1,0 +1,5 @@
+comment = 'UDFs to expand a partitioned table'
+default_version = '1.0'
+module_pathname = '$libdir/expand_part'
+relocatable = true
+superuser = true

@@ -35,7 +35,8 @@ Datum expand_partitioned_table_prepare(PG_FUNCTION_ARGS)
     {
         Oid child_oid = lfirst_oid(child);
         Relation child_rel = relation_open(child_oid, NoLock);
-        if (child_rel->rd_cdbpolicy->numsegments == new_numsegments)
+        if (child_rel->rd_cdbpolicy->numsegments == new_numsegments ||
+            !GpPolicyIsHashPartitioned(child_rel->rd_cdbpolicy))
         {
             relation_close(child_rel, NoLock);
             UnlockRelationId(&(child_rel->rd_lockInfo.lockRelId), AccessExclusiveLock);

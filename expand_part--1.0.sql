@@ -3,7 +3,7 @@ RETURNS INT STRICT
 AS 'MODULE_PATHNAME'
 LANGUAGE C;
 
-CREATE OR REPLACE FUNCTION expand_partitioned_table_redistribute_part(partitioned_table regclass, part regclass)
+CREATE OR REPLACE FUNCTION expand_partitioned_table_redistribute_leaf(partitioned_table regclass, leaf regclass)
 RETURNS INT STRICT
 AS 'MODULE_PATHNAME'
 LANGUAGE C;

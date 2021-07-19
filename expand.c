@@ -16,7 +16,7 @@
 PG_MODULE_MAGIC;
 
 PG_FUNCTION_INFO_V1(expand_partitioned_table_prepare);
-PG_FUNCTION_INFO_V1(expand_partitioned_table_redistribute_part);
+PG_FUNCTION_INFO_V1(expand_partitioned_table_redistribute_leaf);
 
 Datum expand_partitioned_table_prepare(PG_FUNCTION_ARGS)
 {
@@ -54,10 +54,10 @@ Datum expand_partitioned_table_prepare(PG_FUNCTION_ARGS)
     PG_RETURN_DATUM(Int32GetDatum(0));
 }
 
-Datum expand_partitioned_table_redistribute_part(PG_FUNCTION_ARGS)
+Datum expand_partitioned_table_redistribute_leaf(PG_FUNCTION_ARGS)
 {
     Oid root_oid = PG_GETARG_OID(0);
-    Oid part_oid = PG_GETARG_OID(1);
+    Oid leaf_oid = PG_GETARG_OID(1);
     bool connected = false;
     int ret = 0;
 
@@ -72,20 +72,20 @@ Datum expand_partitioned_table_redistribute_part(PG_FUNCTION_ARGS)
         initStringInfo(&alter_table_cmd);
 
         GpPolicy *root_dist = GpPolicyFetch(root_oid);
-        Datum part_name = DirectFunctionCall1(regclassout, ObjectIdGetDatum(part_oid));
+        Datum leaf_name = DirectFunctionCall1(regclassout, ObjectIdGetDatum(leaf_oid));
         if (GpPolicyIsHashPartitioned(root_dist))
         {
             Datum dist_by = DirectFunctionCall1(pg_get_table_distributedby, ObjectIdGetDatum(root_oid));
             appendStringInfo(
-                &alter_table_cmd, "ALTER TABLE %s SET %s;", DatumGetName(part_name)->data, text_to_cstring(DatumGetTextP(dist_by)));
+                &alter_table_cmd, "ALTER TABLE %s SET %s;", DatumGetName(leaf_name)->data, text_to_cstring(DatumGetTextP(dist_by)));
         }
         else
         {
-            appendStringInfo(&alter_table_cmd, "ALTER TABLE %s EXPAND TABLE;", DatumGetName(part_name)->data);
+            appendStringInfo(&alter_table_cmd, "ALTER TABLE %s EXPAND TABLE;", DatumGetName(leaf_name)->data);
         }
         ret = SPI_execute(alter_table_cmd.data, false, 0);
         if (ret != SPI_OK_UTILITY)
-            elog(ERROR, "Redistribute partition %s failed.", DatumGetName(part_name)->data);
+            elog(ERROR, "Redistribute partition %s failed.", DatumGetName(leaf_name)->data);
     }
     PG_CATCH();
     {

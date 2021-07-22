@@ -21,36 +21,38 @@ PG_FUNCTION_INFO_V1(expand_partitioned_table_redistribute_leaf);
 Datum expand_partitioned_table_prepare(PG_FUNCTION_ARGS)
 {
     Oid root_oid = PG_GETARG_OID(0);
+    LockRelationOid(root_oid, AccessExclusiveLock);
+    GpPolicy *root_dist = GpPolicyFetch(root_oid);
 
-    Relation root_rel = relation_open(root_oid, AccessExclusiveLock);
+    Assert(GpPolicyIsPartitioned(root_dist));//either random or hash
 
     List *children = find_all_inheritors(root_oid, AccessExclusiveLock, NULL);
     children = list_delete_first(children);
 
     int new_numsegments = getgpsegmentCount();
 
+    /* xxx */
+    root_dist->numsegments = new_numsegments;
+    GpPolicyReplace(root_oid, root_dist);
+
     ListCell *child = NULL;
     GpPolicy *random_dist = createRandomPartitionedPolicy(new_numsegments);
     foreach (child, children)
     {
         Oid child_oid = lfirst_oid(child);
-        Relation child_rel = relation_open(child_oid, NoLock);
-        if (child_rel->rd_cdbpolicy->numsegments == new_numsegments ||
-            !GpPolicyIsHashPartitioned(child_rel->rd_cdbpolicy))
-        {
-            relation_close(child_rel, NoLock);
-            UnlockRelationId(&(child_rel->rd_lockInfo.lockRelId), AccessExclusiveLock);
-            continue;
-        }
-        GpPolicyReplace(child_oid, random_dist);
-        relation_close(child_rel, NoLock);
-        UnlockRelationId(&(child_rel->rd_lockInfo.lockRelId), AccessExclusiveLock);
+        char relkind = get_rel_relkind(child_oid);
+        bool is_leaf = (relkind != RELKIND_PARTITIONED_TABLE &&
+						relkind != RELKIND_PARTITIONED_INDEX);
+        if (is_leaf)
+            GpPolicyReplace(child_oid, random_dist);
+        else
+            GpPolicyReplace(child_oid, root_dist);
+        // UnlockRelationOid(child_oid, AccessExclusiveLock);
     }
-    GpPolicy *root_dist = GpPolicyFetch(root_oid);
-    root_dist->numsegments = new_numsegments;
-    GpPolicyReplace(root_oid, root_dist);
-    relation_close(root_rel, AccessExclusiveLock);
-
+    
+    list_free(children);
+    pfree(root_dist);
+    // UnlockRelationOid(root_oid, AccessExclusiveLock);
     PG_RETURN_DATUM(Int32GetDatum(0));
 }
 
@@ -70,7 +72,7 @@ Datum expand_partitioned_table_redistribute_leaf(PG_FUNCTION_ARGS)
 
         StringInfoData alter_table_cmd;
         initStringInfo(&alter_table_cmd);
-
+        LockRelationOid(root_oid, AccessShareLock);
         GpPolicy *root_dist = GpPolicyFetch(root_oid);
         Datum leaf_name = DirectFunctionCall1(regclassout, ObjectIdGetDatum(leaf_oid));
         if (GpPolicyIsHashPartitioned(root_dist))
@@ -86,6 +88,7 @@ Datum expand_partitioned_table_redistribute_leaf(PG_FUNCTION_ARGS)
         ret = SPI_execute(alter_table_cmd.data, false, 0);
         if (ret != SPI_OK_UTILITY)
             elog(ERROR, "Redistribute partition %s failed.", DatumGetCString(leaf_name));
+        pfree(root_dist);
     }
     PG_CATCH();
     {
